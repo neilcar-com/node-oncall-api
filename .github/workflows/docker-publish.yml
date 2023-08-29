@@ -79,17 +79,22 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Run Orca Container Image Scan
+        uses: orcasecurity/shiftleft-container-image-action@v1
+        id: orcasecurity_container_image_scan
+        with:
+          api_token: ${{ secrets.ORCA_SECURITY_API_TOKEN }}
+          project_key: default
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main
+          format: "sarif"
+          output:
+            "results/"
+      - name: Upload SARIF file
+        uses: github/codeql-action/upload-sarif@v2
+        if: ${{ always() && steps.orcasecurity_container_image_scan.outputs.exit_code != 1 }}
+        with:
+          sarif_file: results/image.sarif
 
-      # Run Orca CLI against the previously created container image
-      - name: Orca CLI - Security Scanning
-        env:
-          ORCA_SECURITY_API_TOKEN: ${{ secrets.ORCA_SECURITY_API_TOKEN }}
-        run: |
-          set +e
-          echo ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tags }}
-          apt update && apt install -y curl
-          curl -sfL 'https://raw.GitHubusercontent.com/orcasecurity/orca-cli/main/install.sh' | bash
-          orca-cli -p "default" image scan ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main
 
       # Sign the resulting Docker image digest except on PRs.
       # This will only write to the public Rekor transparency log when the Docker
